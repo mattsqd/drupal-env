@@ -1,12 +1,12 @@
 {
-    "name": "mpbixal/drupal-env",
+    "name": "mattsqd/drupal-env",
     "description": "Common functional for working with local and remote Drupal environments.",
     "minimum-stability": "stable",
     "license": "GPL-2.0-or-later",
     "authors": [
         {
-            "name": "mpbixal",
-            "email": "121190622+mpbixal@users.noreply.github.com"
+            "name": "mattsqd",
+            "email": "mattsqd@users.noreply.github.com"
         }
     ],
     "autoload": {

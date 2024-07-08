@@ -15,7 +15,7 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
     /**
      * {@inheritdoc}
      */
-    protected string $package_name = 'mpbixal/drupal-env';
+    protected string $package_name = 'mattsqd/drupal-env';
 
     /**
      * {@inheritdoc}

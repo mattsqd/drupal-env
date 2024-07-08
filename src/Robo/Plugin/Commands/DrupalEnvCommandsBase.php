@@ -180,7 +180,7 @@ abstract class DrupalEnvCommandsBase extends Tasks
         if (!in_array($this->package_name, $composer_json['extra']['drupal-scaffold']['allowed-packages'] ?? [])) {
             $composer_json['extra']['drupal-scaffold']['allowed-packages'][] = $this->package_name;
             $this->saveComposerJson($composer_json);
-            //$this->_exec($composer_path . ' config extra.drupal-scaffold.allowed-packages --json --merge \'["mpbixal/drupal-env"]\'');
+            //$this->_exec($composer_path . ' config extra.drupal-scaffold.allowed-packages --json --merge \'["mattsqd/drupal-env"]\'');
             return true;
         }
         return false;

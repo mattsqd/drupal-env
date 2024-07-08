@@ -223,9 +223,9 @@ class CommonCommands extends Tasks
         $locals = [
             'lando' => [
                 'name' => 'Lando',
-                'installed' => $this->isDependencyInstalled('mpbixal/drupal-env-lando') ? 'Yes, installed' : 'Not installed',
+                'installed' => $this->isDependencyInstalled('mattsqd/drupal-env-lando') ? 'Yes, installed' : 'Not installed',
                 'description' => 'https://lando.dev/ Push-button development environments hosted on your computer or in the cloud. Automate your developer workflow and share it with your team.',
-                'package' => 'mpbixal/drupal-env-lando:dev-main',
+                'package' => 'mattsqd/drupal-env-lando:dev-main',
                 'post_install_commands' => ['./robo.sh drupal-env-lando:scaffold', './robo.sh lando-admin:init'],
             ],
         ];
