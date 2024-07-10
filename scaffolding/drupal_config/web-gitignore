@@ -1,6 +1,7 @@
 #### Added by Drupal Env project scaffolding ####
 
 /core
+/libraries
 /*/contrib
 /sites/*/files
 # Ignore test environment.
