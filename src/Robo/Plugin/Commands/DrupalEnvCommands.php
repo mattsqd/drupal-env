@@ -46,9 +46,24 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
             $this->_copy("$web_root/sites/default/default.settings.php", "$web_root/sites/default/settings.php");
         }
 
-        // Add autoloading so that the robo tasks that are scaffolded in will work.
-        if (!in_array('./RoboEnv/', $composer_json['autoload']['psr-4'] ?? [])) {
-            $composer_json['autoload']['psr-4']['RoboEnv\\'] = './RoboEnv/';
+        // Define required PSR-4 autoload mappings.
+        $values = [
+            // Allow robo tasks that are scaffolded in to work.
+            'RoboEnv\\' => './RoboEnv/',
+            // Allow Drush to be autoloaded from robo commands.
+            'Drush\\'   => './vendor/drush/drush/src-symfony-compatibility/v6/',
+        ];
+
+        // Get current PSR-4 autoload entries.
+        $composer_json['autoload']['psr-4'] = $composer_json['autoload']['psr-4'] ?? [];
+        $autoload_psr4 =& $composer_json['autoload']['psr-4'];
+
+        // Find missing mappings.
+        $missing = array_diff_assoc($values, $autoload_psr4);
+
+        // Add missing mappings and save if there are changes.
+        if (!empty($missing)) {
+            $autoload_psr4 = array_merge($autoload_psr4, $missing);
             $this->saveComposerJson($composer_json);
         }
 
