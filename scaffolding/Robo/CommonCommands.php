@@ -5,6 +5,7 @@ namespace RoboEnv\Robo\Plugin\Commands;
 use Robo\Result;
 use Robo\Tasks;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Finder\Finder;
 
 /**
  * Run common orchestration tasks and provides shared helper methods.
@@ -397,6 +398,93 @@ class CommonCommands extends Tasks
                 $node_edit_choice = $io->confirm('Would you like to use the admin theme for node edit pages? Note that if one does not have the permission to view the admin theme, they will see the default theme.');
                 $this->drush($io, ['config-set', 'node.settings', 'use_admin_theme', (int) $node_edit_choice, '-y']);
             }
+        }
+    }
+
+    /**
+     * Dump aliases that allow easy access to shortcuts.
+     *
+     * @description Use shortcuts like `composer` instead of `./composer.sh`.
+     *
+     * @command common:shortcuts-aliases
+     *
+     * @return void
+     */
+    public function commonShortcutsAliases(SymfonyStyle $io): void
+    {
+        $finder = Finder::create()
+            ->files()
+            ->name('*.sh')
+            ->in(getcwd())
+            ->depth('== 0');
+
+        if ($finder->hasResults()) {
+            $shortcuts = [];
+            foreach ($finder as $file) {
+                $noExtension = substr($file->getRelativePathname(), 0, -3);
+                $shortcuts[] = sprintf(
+                    "alias %s='drupalenv_command %s'",
+                    $noExtension,
+                    $noExtension
+                );
+            }
+            $command = <<<'COMMAND'
+# Aliases added for drupal-env to allow easy access to shell scripts.
+drupalenv_command() {
+  local tool="$1"
+  shift
+  if [[ -x "./${tool}.sh" ]]; then
+    "./${tool}.sh" "$@"
+  else
+    command "$tool" "$@"
+  fi
+}
+COMMAND;
+
+            $io->warning(
+                'These will work for all projects, only add them once.'
+            );
+            $io->warning(
+                'This function is very simple. It looks for the corresponding .sh file in the current directory and calls it if found. If not, it will call the "global" version of the command.'
+            );
+            $io->block($command);
+            $io->block($shortcuts);
+            $io->block('# End aliases for drupal-env.');
+        } else {
+            $io->error(
+                'No .sh files found in the root directory, there are no aliases that can be made.'
+            );
+
+            return;
+        }
+        if (!$io->confirm(
+            'Would you like help adding these aliases to your shell?'
+        )) {
+            return;
+        }
+        $finder = Finder::create()
+            ->files()
+            ->in(getenv('HOME'))
+            ->ignoreDotFiles(false)
+            ->contains('alias ')
+            ->depth('== 0');
+
+        if ($finder->hasResults()) {
+            $aliasesFiles = [];
+            foreach ($finder as $file) {
+                $aliasesFiles[] = $file->getRealPath();
+            }
+            $io->info(
+                'Read more about aliases here https://en.wikipedia.org/wiki/Alias_(command)'
+            );
+            $io->info(
+                "The following files contain aliases already.\nAdd the above block of code to one of these files.\nAfter you edit the file, you may need to reload your shell or 'source' the file."
+            );
+            $io->block($aliasesFiles);
+        } else {
+            $io->warning(
+                'Unable to find any files that contain any aliases in your home directory. Please open a new terminal and type echo $SHELL.'
+            );
         }
     }
 
