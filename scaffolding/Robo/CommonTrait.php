@@ -45,8 +45,13 @@ trait CommonTrait
         $io->comment('./composer.sh: (https://getcomposer.org/) This allows you to use interact with your environment\'s dependencies. It should always be used instead any other composer because it writes to a custom "composer.log" file that documents all composer commands that change the contents of your composer.lock. This makes it easier to solve merge conflicts.');
         $io->comment('./php.sh: (https://www.php.net/) Allows you to choose a PHP version on your machine that may be required by a project in case you have multiple installed or need multiple.');
         $io->comment('./drush.sh: (https://www.drush.org) Allows you to interact with your local environment\'s installation of Drupal. Therefore, a local environment must be installed, configured, and a site installed in order to work.');
-        $this->enterToContinue($io, 'You will now be stepped through configuring where composer AND php (if you have not already) live for your project, PHP must exist on your local machine but you can optionally choose Composer from your local environment (as long as a local exists) or Docker, but it is recommended to install Composer (2) locally (speed).');
-        $this->_exec('./composer.sh');
+        if (empty($this->getConfig('flags.common.paths.composer', [], true))) {
+            $this->enterToContinue(
+                $io,
+                'You will now be stepped through configuring where composer AND php (if you have not already) live for your project, PHP must exist on your local machine but you can optionally choose Composer from your local environment (as long as a local exists) or Docker, but it is recommended to install Composer (2) locally (speed).'
+            );
+            $this->_exec('./composer.sh --version');
+        }
         $this->enterToContinue($io, 'If you would like to reset your path selections or get this message again, please run "./robo.sh common:shortcuts-help".');
         if ($io->confirm('Would you like to be able to type shortcuts like `composer` instead of `./composer.sh`?')) {
             $this->_exec('./robo.sh common:shortcuts-aliases');
