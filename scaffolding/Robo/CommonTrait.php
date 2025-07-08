@@ -448,7 +448,8 @@ trait CommonTrait
     {
         // Remove the version constraint if it has one.
         [$project] = explode(':', $project);
-        return $this->_exec("./composer.sh show $project > /dev/null 2>&1")->wasSuccessful();
+        exec("./composer.sh show $project > /dev/null 2>&1", $output, $exitCode);
+        return (bool) $exitCode;
     }
 
     /**
