@@ -154,6 +154,55 @@ class CommonCommands extends Tasks
     }
 
     /**
+     * Run an inline script inside the local environment.
+     *
+     * @param string $script
+     *
+     * @return bool
+     *
+     * @throws \Exception
+     */
+    public function commonRunScriptInApp(SymfonyStyle $io, string $script): bool {
+        return $this->_exec($this->getBinaryLocation($io, 'exec', '', false) . " '" . $script . "'")->wasSuccessful();
+    }
+
+    /**
+     * Install Drupal.
+     *
+     * @command common:site-install
+     * @aliases si
+     *
+     * @return void
+     */
+    public function commonSiteInstall(SymfonyStyle $io): void {
+        $this->commonRunScriptInApp($io, 'env DRUPAL_UPDATE_OR_INSTALL=install ./orch/deploy_install.sh; env DRUPAL_SOLR_SITE_HASH=abcdef ./orch/post_deploy.sh; drush uli;');
+    }
+
+    /**
+     * Update Drupal.
+     *
+     * @command common:site-update
+     * @aliases su
+     *
+     * @return void
+     */
+    public function commonSiteUpdate(SymfonyStyle $io): void {
+        $this->commonRunScriptInApp($io, 'env DRUPAL_UPDATE_OR_INSTALL=install ./orch/deploy_update.sh; env DRUPAL_SOLR_SITE_HASH=abcdef ./orch/post_deploy.sh; drush uli;');
+    }
+
+    /**
+     * Remove any extra added to bottom of settings.php.
+     *
+     * @command common:remove-settings-php-changes
+     *
+     * @return void
+     */
+    public function ddevRemoveSettingsPhpChanges(SymfonyStyle $io): void
+    {
+        $this->removeSettingsPhpChanges($io);
+    }
+
+    /**
      * Initialize the Drupal Environment.
      *
      * @command common-admin:init
@@ -225,9 +274,16 @@ class CommonCommands extends Tasks
             'lando' => [
                 'name' => 'Lando',
                 'installed' => $this->isDependencyInstalled('mattsqd/drupal-env-lando') ? 'Yes, installed' : 'Not installed',
-                'description' => 'https://lando.dev/ Push-button development environments hosted on your computer or in the cloud. Automate your developer workflow and share it with your team.',
+                'description' => "https://lando.dev/ Push-button development environments hosted on your computer or in the cloud. Automate your developer workflow and share it with your team.",
                 'package' => 'mattsqd/drupal-env-lando:dev-main',
                 'post_install_commands' => ['./robo.sh drupal-env-lando:scaffold', './robo.sh lando-admin:init'],
+            ],
+            'ddev' => [
+                'name' => 'DDEV',
+                'installed' => $this->isDependencyInstalled('mattsqd/drupal-env-ddev') ? 'Yes, installed' : 'Not installed',
+                'description' => 'https://ddev.com/ Docker-based PHP development environments. Container superpowers with zero required Docker skills: environments in minutes, multiple concurrent projects, and less time to deployment.',
+                'package' => 'mattsqd/drupal-env-ddev:dev-main',
+                'post_install_commands' => ['./robo.sh drupal-env-ddev:scaffold', './robo.sh ddev-admin:init'],
             ],
         ];
         $rows = [];
@@ -240,7 +296,12 @@ class CommonCommands extends Tasks
                 $options['description'],
             ];
         }
-        $io->table(['Name', 'Installed', 'Package', 'Post Install Commands', 'Description'], $rows);
+        $table = $io->createTable();
+        $table->setHeaders(['Name', 'Installed', 'Package', 'Post Install Commands', 'Description']);
+        $table->setRows($rows);
+        $table->setColumnMaxWidth(3, 10);
+        $table->setColumnMaxWidth(4, 25);
+        $table->render();
         $not_installed = array_filter($locals, static function (string $key) use ($locals) {
             return $locals[$key]['installed'] === 'Not installed';
         }, ARRAY_FILTER_USE_KEY);
@@ -485,6 +546,51 @@ COMMAND;
             $io->warning(
                 'Unable to find any files that contain any aliases in your home directory. Please open a new terminal and type echo $SHELL.'
             );
+        }
+    }
+
+    /**
+     * Prompt to switch your local environment.
+     *
+     * @description Switch between DDEV, Lando, etc.
+     *
+     * @command common:switch-local-env
+     *
+     * @return void
+     */
+    public function switchLocalEnvironment(SymfonyStyle $io): void
+    {
+        if (!$this->isDefaultLocalEnvironmentSet()) {
+            throw new \Exception('No local environment is set yet.');
+        }
+
+        $current_env_name = $this->getDefaultLocalEnvironment()['name'];
+        $io->note("Your current local environment is $current_env_name");
+        $namespace = 'RoboEnv\Robo\Plugin\Commands';
+        $baseClass = 'RoboEnv\Robo\Plugin\Commands\CommonCommands';
+
+        $matching = [];
+
+        foreach (get_declared_classes() as $class) {
+            if (str_starts_with($class, $namespace) && is_subclass_of($class, $baseClass)) {
+                $matching[] = $class;
+            }
+        }
+        if (count($matching) === 1) {
+            throw new \Exception('Only one local environment is available. Please run ./robo.sh common-admin:init to install another.');
+        }
+        $options = [];
+        foreach ($matching as $new_env_class) {
+            $new_env_name = call_user_func_array([$new_env_class, 'getName'], []);
+            if ($new_env_name !== $current_env_name) {
+                $options[$new_env_name] = $new_env_name;
+            }
+        }
+        $options[''] = 'Cancel';
+        $io->warning('Switching local environments will destroy your database, export your database if it is important.');
+        $new_env_name = $io->choice('Which local environment would you like to switch to?', $options);
+        if (strlen($new_env_name)) {
+            $this->_exec("vendor/bin/robo $new_env_name:init");
         }
     }
 

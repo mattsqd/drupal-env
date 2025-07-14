@@ -3,6 +3,7 @@
 namespace RoboEnv\Robo\Plugin\Commands;
 
 use Dflydev\DotAccessData\Data;
+use Composer\InstalledVersions;
 use Symfony\Component\Console\Question\Question;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Yaml\Yaml;
@@ -212,8 +213,6 @@ trait CommonTrait
             return false;
         }
     }
-
-
 
     /**
      * Get the path to the bin on the machine.
@@ -449,7 +448,7 @@ trait CommonTrait
         // Remove the version constraint if it has one.
         [$project] = explode(':', $project);
         exec("./composer.sh show $project > /dev/null 2>&1", $output, $exitCode);
-        return (bool) $exitCode;
+        return !$exitCode;
     }
 
     /**
@@ -606,7 +605,14 @@ trait CommonTrait
     {
         $return = [];
         foreach ($projects as $project) {
-            [$vendor, $name] = explode('/', $project);
+            if (str_contains($project, '/')) {
+                [$vendor, $name] = explode('/', $project);
+            } else {
+                // If no vendor was given in the project, it's a drupal core
+                // module
+                $vendor = 'drupal';
+                $name = $project;
+            }
             if (!str_contains($name, ":")) {
                 $name .= ":";
             }
@@ -616,6 +622,138 @@ trait CommonTrait
             }
         }
         return $return;
+    }
+
+    /**
+     * Remove changes to settings.php
+     *
+     * @param \Symfony\Component\Console\Style\SymfonyStyle $io
+     *
+     * @return void
+     */
+    protected function removeSettingsPhpChanges(SymfonyStyle $io): void
+    {
+        $path_to_package = InstalledVersions::getInstallPath('mattsqd/drupal-env');
+        if (!is_dir($path_to_package)) {
+            return;
+        }
+        $path_to_marker = $path_to_package . '/scaffolding/drupal_config/settings_additions.php';
+        if (!is_readable($path_to_marker)) {
+            return;
+        }
+        // Read as array of lines
+        $file = file($path_to_marker);
+
+        // The last line in the additions should be the last line in settings.php.
+        $marker = end($file);
+
+        $file = 'web/sites/default/settings.php';
+
+        // Read as array of lines
+        $content = file($file);
+        $newContent = [];
+
+        $after_end = false;
+        $lines_to_remove = [];
+        foreach ($content as $line) {
+            if (str_starts_with($line, $marker)) {
+                // Leave what should have been the last line.
+                $newContent[] = $line;
+                $after_end = true;
+            }
+            elseif (!$after_end) {
+                $newContent[] = $line;
+            } else {
+                $lines_to_remove[] = $line;
+            }
+        }
+        if ($lines_to_remove) {
+            $io->warning('The last line of settings.php should be an include to settings.drupal_env.php. It ensures that local settings and environment specific settings are loaded. If the additions are required and not found in settings.drupal_env.php, please add them manually.');
+            $io->warning('The following lines were removed from settings.php:');
+            $io->writeln(implode('', $lines_to_remove));
+            $io->warning('End lines removed from settings.php');
+            // Removing trailing space and add a single new line to end.
+            file_put_contents($file, rtrim(implode('', $newContent)). "\n");
+        }
+    }
+
+    /**
+     * Act when a shared service is modified.
+     *
+     * @param string $service_type
+     *   The service name.
+     *
+     * @param bool|null $status
+     *   False if nothing changes. True if new service added. Null if service
+     *   removed.
+     *
+     * @return void
+     *
+     * @throws \Exception
+     */
+    protected function reactToSharedService(SymfonyStyle $io, string $service_type, bool|null $status = false): void
+    {
+        // Stayed the same.
+        if ($status === false) {
+            return;
+        }
+        $add = true;
+        // Service is being removed.
+        if ($status === null) {
+            $add = false;
+        }
+        $self = $this;
+        $add_or_remove_module = static function(string $project, array $additional_uninstall = []) use($add, $self, $io): void {
+            if ($add) {
+                $self->installDependencies($io, false, [$project => '']);
+            } else {
+                $additional_uninstall[] = $project;
+                foreach ($additional_uninstall as $project) {
+                    $self->uninstallDependency($io, $project);
+                }
+                // After uninstalling, it's a good idea to purge cache.
+                $self->drush($io, ['cache-rebuild']);
+            }
+        };
+        switch ($service_type) {
+            case 'memcached':
+                $add_or_remove_module('drupal/memcache');
+                break;
+
+            case 'redis':
+                $add_or_remove_module('drupal/redis');
+                break;
+
+            case 'solr':
+            case 'drupal-solr':
+                // Search API gets turned on at the same time as solr, uninstall
+                // it too.
+                $add_or_remove_module('drupal/search_api_solr', ['search_api']);
+                if ($add) {
+                    $this->yell('IMPORTANT MANUAL CONFIGURATION:');
+                    $this->yell("The Search API Solr module has been added and enabled, but you must manually create the core at /admin/config/search/search-api/add-server. Guidelines: The machine name MUST be 'default_solr_server'; The 'Solr Connector' MUST be 'standard'; 'Solr core' must be set, but the value does not matter; All other values can be updated as you see fit.");
+                    $env = $this->getDefaultLocalEnvironment()['name'];
+                    $this->enterToContinue($io, "Once the above has been completed, you can run the command `./robo.sh $env-admin:solr-config` to put the Solr configuration in place. The environment must be rebuilt before this can be run.");
+                }
+                break;
+
+            case 'elasticsearch':
+                // Search API gets turned on at the same time as
+                // elasticsearch_connector, uninstall it too.
+                $add_or_remove_module('drupal/elasticsearch_connector:@dev', ['search_api']);
+                if ($add) {
+                    $this->yell('IMPORTANT MANUAL CONFIGURATION:');
+                    $this->enterToContinue($io, "The Elasticsearch Connector module has been added and enabled, but you must manually create the core at /admin/config/search/search-api/add-server. Guidelines: The machine name MUST be 'default_elasticsearch_server'; The 'ElasticSearch Connector' MUST be 'standard'; 'ElasticSearch URL' must be set, but the value does not matter; All other values can be updated as you see fit.");
+                }
+                break;
+
+            case 'node':
+                if ($add) {
+                    $this->enterToContinue($io, 'If you need to take action during the build process, please edit the "./orch/build_node.sh" file. By default, this file will install deps with npm and run "gulp" on all custom themes that have a package.json.');
+                }
+                break;
+
+        }
     }
 
 }
