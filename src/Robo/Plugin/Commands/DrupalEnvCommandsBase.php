@@ -3,7 +3,8 @@
 namespace DrupalEnv\Robo\Plugin\Commands;
 
 use Robo\Tasks;
-use RoboEnv\Robo\Plugin\Commands\LandoCommands;
+use DrupalEnvLando\Robo\Plugin\Commands\DrupalEnvLandoCommands;
+use DrupalEnvLando\Robo\Plugin\Commands\DrupalEnvDdevCommands;
 
 /**
  * Provide commands to handle installation tasks.
@@ -99,8 +100,11 @@ abstract class DrupalEnvCommandsBase extends Tasks
         // Scaffold all other drupal env projects if they exist.
         // Lando scaffold.
         // @todo: Determine if some sort of event system is possible for this.
-        if (class_exists(LandoCommands::class)) {
+        if (class_exists(DrupalEnvLandoCommands::class)) {
             $this->_exec('vendor/bin/robo drupal-env-lando:scaffold');
+        }
+        if (class_exists(DrupalEnvDdevCommands::class)) {
+            $this->_exec('vendor/bin/robo drupal-env-ddev:scaffold');
         }
     }
 
