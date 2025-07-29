@@ -250,22 +250,11 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
             $this->saveComposerJson($composer_json);
         }
 
-        // @TODO move this to a post drupal scaffold command.
-        // Ensure .gitignore exists, so it can be appended to.
-        if (!file_exists('.gitignore')) {
-            $this->taskFilesystemStack()->touch('.gitignore')->run();
-        }
-
+        // The 'gitignore' option must be false so it doesn't start adding files
         // Add robo commands to composer.json pre and post drupal scaffold
         // commands so that this and other plugins can take action.
         $this->addScript('pre-drupal-scaffold-cmd', 'vendor/bin/robo drupal-env:drupal-scaffold-cmd pre');
         $this->addScript('post-drupal-scaffold-cmd', 'vendor/bin/robo drupal-env:drupal-scaffold-cmd post');
-
-        // Ensure that the patches-file is set.
-        $composer_json = $this->getComposerJson();
-        if (($composer_json['extra']['patches-file'] ?? '') !== 'composer.patches.json') {
-            $this->taskComposerConfig($this->getComposerPath())->set('extra.patches-file', 'composer.patches.json')->run();
-        }
     }
 
     /**
