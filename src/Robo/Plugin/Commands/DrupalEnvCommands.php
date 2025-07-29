@@ -237,6 +237,7 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
         ];
 
         // Get current PSR-4 autoload entries.
+        $composer_json = $this->getComposerJson();
         $composer_json['autoload']['psr-4'] = $composer_json['autoload']['psr-4'] ?? [];
         $autoload_psr4 =& $composer_json['autoload']['psr-4'];
 
