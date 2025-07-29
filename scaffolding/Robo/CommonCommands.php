@@ -215,21 +215,6 @@ class CommonCommands extends Tasks
         // configure them.
         $this->introduceCommonShortcuts($io);
 
-        // Create the config sync directory if it does not exist.
-        if (!is_dir('config/sync')) {
-            $io->note('Creating the config sync directory...');
-            $this->taskFilesystemStack()->mkdir(['config/sync'], 0755)->run();
-        }
-
-        // Add required composer requirements.
-        $io->note('Installing required dependencies...');
-        // Don't any modules that need to be enabled. The local environment
-        // probably won't be ready at this time, unless this is being re-run
-        // after a local is installed. Therefore, you'll have a dependency that
-        // might be required but not enabled.
-        $this->installDependencies($io, false, ['drupal/core-dev' => 'Provides PHP CS'], true);
-        $this->installDependencies($io, false, ['drush/drush' => 'Required for CLI access to Drupal']);
-
         $io->success('Your project is now ready to install remote (none yet) and local environments');
 
         $io->success('Configure one or more local environments: ./robo.sh common-admin:local');
@@ -276,14 +261,14 @@ class CommonCommands extends Tasks
                 'installed' => $this->isDependencyInstalled('mattsqd/drupal-env-lando') ? 'Yes, installed' : 'Not installed',
                 'description' => "https://lando.dev/ Push-button development environments hosted on your computer or in the cloud. Automate your developer workflow and share it with your team.",
                 'package' => 'mattsqd/drupal-env-lando:dev-main',
-                'post_install_commands' => ['./robo.sh drupal-env-lando:scaffold', './robo.sh lando-admin:init'],
+                'post_install_commands' => ['./robo.sh drupal-env-lando:enable-scaffold', './robo.sh lando-admin:init'],
             ],
             'ddev' => [
                 'name' => 'DDEV',
                 'installed' => $this->isDependencyInstalled('mattsqd/drupal-env-ddev') ? 'Yes, installed' : 'Not installed',
                 'description' => 'https://ddev.com/ Docker-based PHP development environments. Container superpowers with zero required Docker skills: environments in minutes, multiple concurrent projects, and less time to deployment.',
                 'package' => 'mattsqd/drupal-env-ddev:dev-main',
-                'post_install_commands' => ['./robo.sh drupal-env-ddev:scaffold', './robo.sh ddev-admin:init'],
+                'post_install_commands' => ['./robo.sh drupal-env-ddev:enable-scaffold', './robo.sh ddev-admin:init'],
             ],
         ];
         $rows = [];
@@ -323,9 +308,6 @@ class CommonCommands extends Tasks
                     $this->_exec($post_install_command);
                 }
             }
-            // Scaffold all, in case the order matters for the plugin just
-            // installed.
-            $this->_exec('./robo.sh drupal-env:scaffold-all');
         } else {
             $io->warning("There was an issue installing {$locals[$choice]['package']}.");
         }
