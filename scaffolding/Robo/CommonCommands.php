@@ -260,14 +260,14 @@ class CommonCommands extends Tasks
                 'name' => 'Lando',
                 'installed' => $this->isDependencyInstalled('mattsqd/drupal-env-lando') ? 'Yes, installed' : 'Not installed',
                 'description' => "https://lando.dev/ Push-button development environments hosted on your computer or in the cloud. Automate your developer workflow and share it with your team.",
-                'package' => 'mattsqd/drupal-env-lando:dev-main',
+                'package' => 'mattsqd/drupal-env-lando:2.x-dev',
                 'post_install_commands' => ['./robo.sh drupal-env-lando:enable-scaffold', './robo.sh lando-admin:init'],
             ],
             'ddev' => [
                 'name' => 'DDEV',
                 'installed' => $this->isDependencyInstalled('mattsqd/drupal-env-ddev') ? 'Yes, installed' : 'Not installed',
                 'description' => 'https://ddev.com/ Docker-based PHP development environments. Container superpowers with zero required Docker skills: environments in minutes, multiple concurrent projects, and less time to deployment.',
-                'package' => 'mattsqd/drupal-env-ddev:dev-main',
+                'package' => 'mattsqd/drupal-env-ddev:2.x-dev',
                 'post_install_commands' => ['./robo.sh drupal-env-ddev:enable-scaffold', './robo.sh ddev-admin:init'],
             ],
         ];
