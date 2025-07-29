@@ -30,16 +30,6 @@
     "extra": {
         "drupal-scaffold": {
             "file-mapping": {
-                "[project-root]/composer.patches.json": {
-                    "mode": "replace",
-                    "path": "scaffolding/composer/composer.patches.json",
-                    "overwrite": true
-                },
-                "[project-root]/patches/drupal.core-composer-scaffold.implicit-drupal-core-disable.patch": {
-                    "mode": "replace",
-                    "path": "scaffolding/composer/drupal.core-composer-scaffold.implicit-drupal-core-disable.patch",
-                    "overwrite": true
-                },
                 "[web-root]/sites/updated.development.services.yml": {
                     "mode": "replace",
                     "path": "scaffolding/drupal_config/updated.development.services.yml",

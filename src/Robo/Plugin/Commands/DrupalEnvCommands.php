@@ -101,12 +101,6 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
             $composer_json['scripts']['post-drupal-scaffold-cmd'][] = $post_drupal_scaffold_cmd;
             $this->saveComposerJson($composer_json);
         }
-
-        // Ensure that the patches-file is set.
-        $composer_json = $this->getComposerJson();
-        if (($composer_json['extra']['patches-file'] ?? '') !== 'composer.patches.json') {
-            $this->taskComposerConfig($this->getComposerPath())->set('extra.patches-file', 'composer.patches.json')->run();
-        }
     }
 
 }
