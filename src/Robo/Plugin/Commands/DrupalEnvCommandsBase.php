@@ -3,8 +3,7 @@
 namespace DrupalEnv\Robo\Plugin\Commands;
 
 use Robo\Tasks;
-use DrupalEnvLando\Robo\Plugin\Commands\DrupalEnvLandoCommands;
-use DrupalEnvLando\Robo\Plugin\Commands\DrupalEnvDdevCommands;
+use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
  * Provide commands to handle installation tasks.
@@ -20,14 +19,6 @@ abstract class DrupalEnvCommandsBase extends Tasks
      * @var string
      */
     protected string $package_name;
-
-    /**
-     * If the command is scaffolding on behalf of another package, there is
-     * no prescaffolding to run.
-     *
-     * @var bool
-     */
-    protected bool $disable_pre_scaffolding = false;
 
     /**
      * Retrieve the package name.
@@ -53,9 +44,6 @@ abstract class DrupalEnvCommandsBase extends Tasks
      */
     protected function getComposerPath(): string
     {
-        /*if (`which ./composer.sh`) {
-          return './composer.sh';
-        } else*/
         if (`which composer`) {
             return 'composer';
         } elseif (`which docker`) {
@@ -65,90 +53,31 @@ abstract class DrupalEnvCommandsBase extends Tasks
     }
 
     /**
-     * Scaffold a single project.
-     *
-     * This enables the scaffolding, runs it, then disables it from being
-     * scaffolded when composer drupal:scaffold is called. Scaffolding is
-     * manual process so that a proper order can be done.
-     *
-     * @command drupal-env:scaffold
-     *
-     * @param string $package_name
-     *   Allows to scaffold packages that do not have their own Robo command.
-     *   If this is past, then there is no preScaffoldChanges() that get run.
-     */
-    public function scaffold(string $package_name = ''): void
-    {
-        if (strlen($package_name)) {
-            $this->package_name = $package_name;
-            $this->disable_pre_scaffolding = true;
-        }
-        $this->updateScaffolding();
-    }
-
-    /**
-     * Run the scaffolding for each project needs it.
-     *
-     * @command drupal-env:scaffold-all
-     */
-    public function scaffoldAll(): void
-    {
-        // Drupal core.
-        $this->_exec('vendor/bin/robo drupal-env:scaffold drupal/core');
-        // Common scaffold (this file).
-        $this->_exec('vendor/bin/robo drupal-env:scaffold');
-        // Scaffold all other drupal env projects if they exist.
-        // Lando scaffold.
-        // @todo: Determine if some sort of event system is possible for this.
-        if (class_exists(DrupalEnvLandoCommands::class)) {
-            $this->_exec('vendor/bin/robo drupal-env-lando:scaffold');
-        }
-        if (class_exists(DrupalEnvDdevCommands::class)) {
-            $this->_exec('vendor/bin/robo drupal-env-ddev:scaffold');
-        }
-    }
-
-    /**
-     * Update all the scaffolding in the current project.
-     *
-     * @return void
-     *
-     * @throws \Exception
-     */
-    protected function updateScaffolding(): void
-    {
-        $composer_path = $this->getComposerPath();
-
-        $composer_json_hash_before = md5_file('composer.json');
-
-        // Take care of any items needed before scaffolding happens.
-        if (!$this->disable_pre_scaffolding) {
-            $this->preScaffoldChanges();
-        }
-
-        // Make sure that our scaffolding can run.
-        $this->enableScaffolding();
-
-        // Now that everything is ready, run the scaffolding.
-
-        $this->_exec($composer_path . ' drupal:scaffold');
-
-        $this->disableScaffolding();
-
-        // If composer.json was updated, the lock file also has to be updated.
-        if ($composer_json_hash_before !== md5_file('composer.json')) {
-            $this->_exec($composer_path . ' update --lock');
-        }
-
-        $this->yell("The scaffolding has been enabled and run for {$this->getPackageName()}, bringing in any new scaffolded files. Afterwords, it was disabled so that scaffolding is not updated every time composer install is called.");
-    }
-
-    /**
-     * Take care of any items needed before scaffolding happens.
+     * Do tasks needed before scaffolding is enabled and done.
      *
      * @return void
      */
-    abstract protected function preScaffoldChanges(): void;
+    abstract protected function beforeEnableScaffolding(SymfonyStyle $io): void;
+
+    /**
+     * Run this robo command before scaffolding.
+     *
+     * Return empty array to skip.
+     *
+     * @return array
+     *   An array of robo commands to run.
+     */
+    abstract public static function preScaffoldCommand(): array;
+
+    /**
+     * Run this robo command before scaffolding.
+     *
+     * Return empty array to skip.
+     *
+     * @return array
+     *    An array of robo commands to run
+     */
+    abstract public static function postScaffoldCommand(): array;
 
     /**
      * Retrieve the value of composer.json.
@@ -175,37 +104,101 @@ abstract class DrupalEnvCommandsBase extends Tasks
     /**
      * Turn on scaffolding in composer.json for a single $project.
      *
-     * @return bool
-     *   True if composer.json needed to be updated.
+     * @return @void
      */
-    protected function enableScaffolding(): bool
+    protected function enableScaffolding(SymfonyStyle $io): void
     {
         $composer_json = $this->getComposerJson();
-        if (!in_array($this->package_name, $composer_json['extra']['drupal-scaffold']['allowed-packages'] ?? [])) {
-            $composer_json['extra']['drupal-scaffold']['allowed-packages'][] = $this->package_name;
+        if (!in_array($this->getPackageName(), $composer_json['extra']['drupal-scaffold']['allowed-packages'] ?? [])) {
+            if (method_exists($this, 'beforeEnableScaffolding')) {
+                $this->beforeEnableScaffolding($io);
+                // This will modfy composer.json, reload its value.
+                $composer_json = $this->getComposerJson();
+            }
+            $io->note('Enabling scaffolding for ' . $this->getPackageName());
+            $composer_json['extra']['drupal-scaffold']['allowed-packages'][] = $this->getPackageName();
             $this->saveComposerJson($composer_json);
+            // Composer.json has been updated manually, update composer.lock.
+            $this->_exec($this->getComposerPath() . ' update --lock');
             //$this->_exec($composer_path . ' config extra.drupal-scaffold.allowed-packages --json --merge \'["mattsqd/drupal-env"]\'');
-            return true;
+            // Now that scaffolding is enabled, run composer install so that
+            // scaffolding is run.
+            $this->taskComposerInstall($this->getComposerPath())->run();
+        } else {
+            $io->note('Scaffolding already enabled for ' . $this->getPackageName());
         }
-        return false;
     }
 
     /**
-     * Turn off scaffolding in composer.json for a single $project.
+     * Append $content to $target_file surrounded by comments.
      *
-     * @return bool
-     *   True if composer.json needed to be updated.
+     * If the comments already exist and the $content changes, just the body
+     * of the file will be updated.
      *
+     * @param string $target_file The file to append to.
+     * @param string $content The content to append.
+     * @param string $packageName The name of the package that is appending.
+     * @param string $comment_start What to put at the start the comments at the start and end with. Usually '#'.
+     * @param string $comment_end What to put at the end of the comments at the start and end with. Usually empty, although an HTML comment might be !-->.
+     *
+     * @return void
+     *
+     * @throws \Exception
      */
-    protected function disableScaffolding(): bool
+    protected function append($target_file, string $content, string $packageName, string $comment_start, string $comment_end): void
     {
-        $composer_json = $this->getComposerJson();
-        if (false !== $key = array_search($this->package_name, $composer_json['extra']['drupal-scaffold']['allowed-packages'] ?? [])) {
-            unset($composer_json['extra']['drupal-scaffold']['allowed-packages'][$key]);
-            $this->saveComposerJson($composer_json);
-            return true;
+        // Ensure web root ends in "/".
+        $web_root = $this->getComposerJson()['extra']['drupal-scaffold']['locations']['web-root'] ?? 'web';
+
+        $target_file = str_replace([
+                '[web-root]',
+                '[project-root]/'
+            ], [
+                trim($web_root, '/'),
+                '',
+            ], $target_file
+        );
+
+        if (!file_exists($target_file)) {
+            $this->taskFilesystemStack()->touch($target_file)->run();
         }
-        return false;
+        if (!is_writable($target_file)) {
+            throw new \Exception('File is not writable: ' . $target_file);
+        }
+
+        $original = file_get_contents($target_file);
+
+        if (strlen($comment_end)) {
+            $comment_end = " $comment_end";
+        }
+        $prefix = "\n$comment_start Appended to by $packageName.$comment_end\n\n";
+        $suffix = "\n$comment_start End of appended content by $packageName.$comment_end\n";
+
+        $new_contents = $prefix . $content . $suffix;
+
+        // Prefix does not exist, so append.
+        if (strpos($original, $prefix) === false) {
+            $this->taskWriteToFile($target_file)
+                ->text($new_contents)
+                ->append(true)
+                ->run();
+        } else {
+            // Prefix exists, so replace.
+            $pattern = sprintf(
+                '/%1$s.*?%2$s/s',
+                preg_quote($prefix, '/'),
+                preg_quote($suffix, '/')
+            );
+            // Simulate the replacement.
+            $updated = preg_replace($pattern, $new_contents, $original);
+            // Only write if the replacement is different.
+            if ($original !== $updated) {
+                $this->taskWriteToFile($target_file)
+                    ->text($updated)
+                    ->run();
+            }
+        }
+
     }
 
 }
