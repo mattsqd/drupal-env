@@ -655,10 +655,16 @@ trait CommonTrait
 
         $after_end = false;
         $lines_to_remove = [];
-        foreach ($content as $line) {
+        foreach ($content as $key => $line) {
             if (str_starts_with($line, $marker)) {
                 // Leave what should have been the last line.
                 $newContent[] = $line;
+                // The appending functionality adds a comment as a wrapper token
+                // so that content can be changed. Leave that.
+                if (isset($content[$key + 1]) && isset($content[$key + 2]) && str_starts_with($content[$key + 2], '//')) {
+                    $newContent[] = $content[$key + 1];
+                    $newContent[] = $content[$key + 2];
+                }
                 $after_end = true;
             }
             elseif (!$after_end) {
