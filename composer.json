@@ -28,6 +28,17 @@
         }
     },
     "extra": {
+        "drupal-env": {
+            "file-mapping": {
+                "[web-root]/sites/default/settings.php": {
+                    "path": "scaffolding/drupal_config/settings_additions.php",
+                    "comment_start": "//",
+                    "comment_end": ""
+                },
+                "[project-root]/.gitignore": "scaffolding/drupal_config/root-gitignore-additions.txt",
+                "[project-root]/.editorconfig": "scaffolding/ide_config/root-editorconfig"
+            }
+        },
         "drupal-scaffold": {
             "file-mapping": {
                 "[project-root]/composer.patches.json": {
@@ -44,10 +55,6 @@
                     "mode": "replace",
                     "path": "scaffolding/drupal_config/updated.development.services.yml",
                     "overwrite": true
-                },
-                "[web-root]/sites/default/settings.php": {
-                    "append": "scaffolding/drupal_config/settings_additions.php",
-                    "force-append": true
                 },
                 "[web-root]/sites/default/settings.drupal_env.php": {
                     "mode": "replace",
@@ -84,19 +91,12 @@
                     "path": "scaffolding/drupal_config/settings.redis.php",
                     "overwrite": true
                 },
-                "[project-root]/.gitignore": {
-                    "append": "scaffolding/drupal_config/root-gitignore-additions.txt",
-                    "force-append": true
-                },
                 "[web-root]/.gitignore": {
                     "mode": "replace",
                     "path": "scaffolding/drupal_config/web-gitignore",
                     "overwrite": true
                 },
-                "[project-root]/.editorconfig": {
-                    "append": "scaffolding/ide_config/root-editorconfig",
-                    "force-append": true
-                },
+
                 "[project-root]/.run/appserver.run.xml": {
                     "mode": "replace",
                     "path": "scaffolding/ide_config/phpstorm-appserver.run.xml",

@@ -1,5 +1,3 @@
-#### Added by Drupal Env project scaffolding ####
-
 # Ignore .env files as they are personal
 /*.env
 # Ensure composer.log is NOT ignored.
@@ -48,5 +46,3 @@ Thumbs.db
 roboConfDrupalEnv.local.yml
 # ./php.sh bin path
 .php.env
-
-#### End added by Drupal Env project scaffolding ####
