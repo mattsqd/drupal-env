@@ -36,7 +36,8 @@
                     "comment_end": ""
                 },
                 "[project-root]/.gitignore": "scaffolding/drupal_config/root-gitignore-additions.txt",
-                "[project-root]/.editorconfig": "scaffolding/ide_config/root-editorconfig"
+                "[project-root]/.editorconfig": "scaffolding/ide_config/root-editorconfig",
+                "[web-root]/.gitignore": "scaffolding/drupal_config/web-gitignore"
             }
         },
         "drupal-scaffold": {
@@ -81,12 +82,6 @@
                     "path": "scaffolding/drupal_config/settings.redis.php",
                     "overwrite": true
                 },
-                "[web-root]/.gitignore": {
-                    "mode": "replace",
-                    "path": "scaffolding/drupal_config/web-gitignore",
-                    "overwrite": true
-                },
-
                 "[project-root]/.run/appserver.run.xml": {
                     "mode": "replace",
                     "path": "scaffolding/ide_config/phpstorm-appserver.run.xml",
