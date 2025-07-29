@@ -192,15 +192,14 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
         // Add required composer requirements.
         $io->note('Installing required dependencies...');
 
-        $composer_json = $this->getComposerJson();
         // Add core-dev.
-        if (empty($composer_json['require-dev']['drupal/core-dev'])) {
+        if (empty($this->getComposerJson()['require-dev']['drupal/core-dev'])) {
             $this->taskComposerRequire($this->getComposerPath())->dependency(
                 'drupal/core-dev'
             )->dev()->run();
         }
         // Add Drush.
-        if (empty($composer_json['require']['drush/drush'])) {
+        if (empty($this->getComposerJson()['require']['drush/drush'])) {
             $this->taskComposerRequire($this->getComposerPath())->dependency(
                 'drush/drush'
             )->run();
@@ -208,7 +207,7 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
         // Add cweagans/composer-patches as a dependency. It is needed so that
         // the patch to drupal core scaffolding can be applied right away
         // so that drupal core does not remove .editorconfig scaffolding.
-        if (empty($composer_json['require']['cweagans/composer-patches'])) {
+        if (empty($this->getComposerJson()['require']['cweagans/composer-patches'])) {
             $this->taskComposerRequire($this->getComposerPath())->dependency('cweagans/composer-patches')->run();
         }
 
@@ -223,7 +222,7 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
 
         // Ensure that settings.php is in place, so it can be appended to by the
         // scaffolding.
-        $web_root = $composer_json['extra']['drupal-scaffold']['locations']['web-root'] ?? 'web';
+        $web_root = $this->getComposerJson()['extra']['drupal-scaffold']['locations']['web-root'] ?? 'web';
         $web_root = rtrim($web_root, '/');
         if (!file_exists("$web_root/sites/default/settings.php") && file_exists("$web_root/sites/default/default.settings.php")) {
             $this->_copy("$web_root/sites/default/default.settings.php", "$web_root/sites/default/settings.php");
