@@ -47,7 +47,8 @@ if [ -z "$DRUPAL_ENV_LOCAL" ] && [ -z "$DRUPAL_ENV_REMOTE" ]; then
     # A valid path to PHP must be entered to continue.
     while true; do
       echo ""
-      read -e -i "$default_php_path" -p "Please enter the path to PHP on your local machine: " custom_php_path
+      printf "Please enter the path to PHP on your local machine [%s]: " "$default_php_path"
+      read custom_php_path
       echo ""
       custom_php_path=${custom_php_path:-$default_php_path}
       if [[ -z "$custom_php_path" || ! $(command -v $custom_php_path) ]]; then
