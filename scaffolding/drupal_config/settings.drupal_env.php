@@ -13,7 +13,12 @@
  * directory in the public files path. The setting below allows you to set
  * its location.
  */
-$settings['config_sync_directory'] = '../config/sync';
+if (getenv('DRUPAL_CONFIG_SYNC') !== FALSE) {
+  $settings['config_sync_directory'] = getenv('DRUPAL_CONFIG_SYNC');
+}
+// This is to ensure that config does not end up in the public readable
+// files directory if not explicitly set.
+$settings['config_sync_directory'] = $settings['config_sync_directory'] ?? '../config/sync';
 
 /**
  * Salt for one-time login links, cancel links, form tokens, etc.
