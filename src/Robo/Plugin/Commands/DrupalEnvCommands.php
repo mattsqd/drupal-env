@@ -4,6 +4,9 @@ namespace DrupalEnv\Robo\Plugin\Commands;
 
 use Composer\InstalledVersions;
 use Drupal\Component\Utility\Crypt;
+use DrupalEnv\Upgrade\GitTracked;
+use DrupalEnv\Upgrade\Upgrade3x;
+use Robo\ResultData;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
@@ -123,7 +126,40 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
      */
     public static function preScaffoldCommand(): array
     {
-        return [];
+        return ['drupal-env:upgrade-3x'];
+    }
+
+    /**
+     * Check a 2.x site for upgrade blockers, then clean up after 2.x.
+     *
+     * Stops Composer (non-zero exit) and deletes nothing when problems are
+     * found.
+     *
+     * @command drupal-env:upgrade-3x
+     */
+    public function upgrade3x(SymfonyStyle $io): ResultData
+    {
+        $root = getcwd();
+        if ($root === false) {
+            $io->error('drupal-env 3.x upgrade check could not determine the current directory.');
+            return new ResultData(1);
+        }
+        $template = InstalledVersions::getInstallPath('mattsqd/drupal-env') . '/scaffolding/Robo/RoboFile.php';
+        $upgrade = new Upgrade3x($root, GitTracked::forRoot($root), $template);
+        $problems = $upgrade->findProblems();
+        if ($problems) {
+            $io->error('drupal-env 3.x upgrade stopped. Nothing was deleted.');
+            $io->table(
+                ['File', 'Line', 'Reason', 'Fix'],
+                array_map(fn($p) => [$p['file'], $p['line'] ?? '', $p['reason'], $p['fix']], $problems)
+            );
+            $io->writeln('See https://github.com/mattsqd/drupal-env#upgrading-from-2x');
+            return new ResultData(1);
+        }
+        foreach ($upgrade->cleanUp() as $line) {
+            $io->writeln($line);
+        }
+        return new ResultData(0);
     }
 
     /**
@@ -171,7 +207,10 @@ class DrupalEnvCommands extends DrupalEnvCommandsBase
                 // This is an abstract method, so it has to be implemented, but
                 // it can be an empty string to skip.
                 foreach ($robo_commands as $robo_command) {
-                    $this->_exec('vendor/bin/robo ' . $robo_command);
+                    $result = $this->_exec('vendor/bin/robo ' . $robo_command);
+                    if (!$result->wasSuccessful()) {
+                        throw new \Exception("vendor/bin/robo $robo_command failed.");
+                    }
                 }
             }
         }

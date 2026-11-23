@@ -1,9 +1,18 @@
 <?php
 
-namespace RoboEnv\Robo\Plugin\Commands;
+declare(strict_types=1);
 
-use Dflydev\DotAccessData\Data;
+namespace DrupalEnv\Robo;
+
 use Composer\InstalledVersions;
+use Dflydev\DotAccessData\Data;
+use DrupalEnv\Environment\Environment;
+use DrupalEnv\Environment\EnvironmentContext;
+use DrupalEnv\Environment\EnvironmentRegistry;
+use DrupalEnv\Environment\EnvironmentResolver;
+use DrupalEnv\Environment\StepSupport;
+use Robo\Result;
+use Robo\Robo;
 use Symfony\Component\Console\Question\Question;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Yaml\Yaml;
@@ -11,7 +20,7 @@ use Symfony\Component\Yaml\Yaml;
 /**
  * Provides common functionality that all plugins can use.
  */
-trait CommonTrait
+trait DenvTrait
 {
 
     /**
@@ -53,11 +62,11 @@ trait CommonTrait
             );
             $this->_exec('./composer.sh --version');
         }
-        $this->enterToContinue($io, 'If you would like to reset your path selections or get this message again, please run "./robo.sh common:shortcuts-help".');
+        $this->enterToContinue($io, 'If you would like to reset your path selections or get this message again, please run "./robo.sh denv:shortcuts-help".');
         if ($io->confirm('Would you like to be able to type shortcuts like `composer` instead of `./composer.sh`?')) {
-            $this->_exec('./robo.sh common:shortcuts-aliases');
+            $this->_exec('./robo.sh denv:shortcuts-aliases');
         }
-        $this->enterToContinue($io, 'If you would like to see these aliases again, please run "./robo.sh common:shortcuts-aliases".');
+        $this->enterToContinue($io, 'If you would like to see these aliases again, please run "./robo.sh denv:shortcuts-aliases".');
     }
 
     /**
@@ -158,6 +167,57 @@ trait CommonTrait
     }
 
     /**
+     * Memoized registry of installed environment packages.
+     */
+    protected function environmentRegistry(): EnvironmentRegistry
+    {
+        return EnvironmentContext::registry(static fn (): EnvironmentRegistry => EnvironmentRegistry::fromInstalledPackages());
+    }
+
+    /**
+     * Resolve the name of the local environment this run acts on.
+     *
+     * Uses --env when the current command defines it, otherwise the active,
+     * installed and preferred environments. Resolved once per process.
+     *
+     * @throws \Exception
+     */
+    protected function localEnvName(): string
+    {
+        return EnvironmentContext::name(function (): string {
+            $input = Robo::input();
+            $option = null;
+            if ($input->hasOption('env')) {
+                $value = $input->getOption('env');
+                $option = is_string($value) && $value !== '' ? $value : null;
+            }
+            return EnvironmentResolver::resolve(
+                $option,
+                $this->getActiveEnvironmentName(),
+                $this->environmentRegistry()->names(),
+                $this->getPreferredEnvironmentName(),
+                $input->isInteractive(),
+                static function (array $choices, ?string $default): string {
+                    $io = new SymfonyStyle(Robo::input(), Robo::output());
+                    return (string) $io->choice('Which local environment?', $choices, $default);
+                }
+            );
+        });
+    }
+
+    /**
+     * The resolved local environment, built by Robo so services are injected.
+     *
+     * @throws \Exception
+     */
+    protected function localEnv(): Environment
+    {
+        return EnvironmentContext::environment(
+            fn (): Environment => Robo::instantiate($this->environmentRegistry()->classFor($this->localEnvName()))
+        );
+    }
+
+    /**
      * Call the local environment method for command $name.
      *
      * @param string $name
@@ -169,49 +229,161 @@ trait CommonTrait
      */
     protected function getLocalEnvCommand(string $name, bool $inside = true): string
     {
-        return call_user_func_array([$this->getDefaultLocalEnvironment()['commands_class'], $name . 'Command'], [$inside]);
+        return call_user_func_array([$this->environmentRegistry()->classFor($this->localEnvName()), $name . 'Command'], [$inside]);
     }
 
     /**
-     * Set the default local environment so commands can be routed.
-     *
-     * @param string $name
-     *
-     * @return void
+     * Save the active local environment so shortcuts can be routed.
      */
-    protected function setDefaultLocalEnvironment(string $name): void
+    protected function setActiveEnvironment(string $name): void
     {
         $this->saveConfig('flags.common.defaultLocalEnvironment.name', $name, true);
-        $this->saveConfig('flags.common.defaultLocalEnvironment.commands_class', static::class, true);
+        $this->removeConfig('flags.common.defaultLocalEnvironment.commands_class', true);
+        EnvironmentContext::reset();
     }
 
     /**
-     * Retrieve the current default local environment.
-     *
-     * @return array
-     *
-     * @throws \Exception
+     * The active local environment name, if one has been saved.
      */
-    protected function getDefaultLocalEnvironment(): array
+    protected function getActiveEnvironmentName(): ?string
     {
-        $config = $this->getConfig('flags.common.defaultLocalEnvironment', [], true);
-        if (empty($config)) {
-            throw new \Exception('Cannot call this until the local environment has been initialized.');
+        $name = $this->getConfig('flags.common.defaultLocalEnvironment.name', null, true);
+        return is_string($name) && $name !== '' ? $name : null;
+    }
+
+    /**
+     * The team's preferred local environment (committed config).
+     */
+    protected function getPreferredEnvironmentName(): ?string
+    {
+        $name = $this->getConfig('flags.common.preferredLocalEnvironment');
+        return is_string($name) && $name !== '' ? $name : null;
+    }
+
+    /**
+     * Set or clear (null) the preferred local environment (committed config).
+     */
+    protected function setPreferredEnvironmentName(?string $name): void
+    {
+        if ($name === null) {
+            $this->removeConfig('flags.common.preferredLocalEnvironment');
+            return;
         }
-        return $config;
+        $this->saveConfig('flags.common.preferredLocalEnvironment', $name);
     }
 
     /**
-     * Has a default local environment been chosen?
+     * Remove a key from the config.
      */
-    protected function isDefaultLocalEnvironmentSet(): bool
+    protected function removeConfig(string $key, bool $local = false): bool
     {
-        try {
-            $this->getDefaultLocalEnvironment();
+        [$config_file, $config_data] = $this->switchConfig($local);
+        if (!$config_data->has($key)) {
             return true;
-        } catch (\Exception $exception) {
-            return false;
         }
+        $config_data->remove($key);
+        return $this->saveYml($config_file, $config_data->export());
+    }
+
+    /**
+     * Run another command through robo so its hooks fire.
+     *
+     * @param string $command
+     *   A command name, e.g. "denv:local-urls".
+     * @param string[] $args
+     *   Extra, already-valid arguments and options.
+     *
+     * @return bool
+     *   True on success.
+     */
+    protected function runStep(string $command, array $args = []): bool
+    {
+        $parts = ['vendor/bin/robo', $command, '--env=' . $this->localEnvName()];
+        foreach ($args as $arg) {
+            $parts[] = $arg;
+        }
+        $line = implode(' ', array_map('escapeshellarg', $parts));
+        return $this->_exec($line)->wasSuccessful();
+    }
+
+    /**
+     * Whether the local environment supports an optional step.
+     *
+     * @param string $feature
+     *   A feature interface class name.
+     * @param string $command
+     *   The command name a replace hook could target.
+     */
+    protected function isStepSupported(string $feature, string $command): bool
+    {
+        return StepSupport::isSupported(get_class($this->localEnv()), $feature, Robo::service('hookManager'), $command);
+    }
+
+    /**
+     * Run an optional step, or say it is skipped.
+     *
+     * @return bool
+     *   True when skipped or successful.
+     */
+    protected function runOptionalStep(SymfonyStyle $io, string $feature, string $command, string $what): bool
+    {
+        if (!$this->isStepSupported($feature, $command)) {
+            $io->note('Skipping ' . $what . ': not supported by ' . $this->localEnvLabel() . '.');
+            return true;
+        }
+        return $this->runStep($command);
+    }
+
+    /**
+     * Get the environment if it supports a feature, otherwise explain.
+     *
+     * Callers should `return new ResultData(1)` on null.
+     */
+    protected function requireFeature(SymfonyStyle $io, string $feature, string $command): ?Environment
+    {
+        if (!$this->isStepSupported($feature, $command)) {
+            $io->error('`' . $command . "` isn't supported by " . $this->localEnvLabel() . '.');
+            return null;
+        }
+        return $this->localEnv();
+    }
+
+    /**
+     * The human label of the resolved environment.
+     */
+    protected function localEnvLabel(): string
+    {
+        return $this->environmentRegistry()->classFor($this->localEnvName())::getLabel();
+    }
+
+    /**
+     * Ensure that an original install directory flag is set.
+     *
+     * This helps with the project copying functionality.
+     *
+     * @return string
+     */
+    protected function ensureOriginalInstallDirectorySet(): string
+    {
+        $key = 'flags.' . $this->localEnvName() . '.originalInstallDirectory';
+        $original_install_directory = $this->getConfig($key, '', true);
+        if (!strlen($original_install_directory)) {
+            $original_install_directory = basename(realpath(getcwd()));
+            $this->saveConfig($key, $original_install_directory, true);
+        }
+        return $original_install_directory;
+    }
+
+    /**
+     * Get a project folder name that is a sibling.
+     *
+     * @param string $sibling_project_folder_name
+     *
+     * @return string
+     */
+    protected function getSiblingAbsDir(string $sibling_project_folder_name): string
+    {
+        return realpath(getcwd() . DIRECTORY_SEPARATOR . '..') . DIRECTORY_SEPARATOR . $sibling_project_folder_name;
     }
 
     /**
@@ -362,7 +534,7 @@ trait CommonTrait
         if (!empty($path_config)) {
             switch ($path_config['type']) {
                 case 'local_environment':
-                    return $this->getLocalEnvCommand('composer', false);
+                    return $this->getLocalEnvCommand($name, false);
 
                 case 'local_machine':
                     if (!empty($path_config['path']) && $this->executableFilePath($path_config['path'])) {
@@ -402,7 +574,7 @@ trait CommonTrait
 
             case 'Local Environment':
                 $this->saveConfig($flag_name, ['type' => 'local_environment'], true);
-                return $this->getLocalEnvCommand('composer', false);
+                return $this->getLocalEnvCommand($name, false);
 
             case 'Docker':
                 if ($this->executableFilePath('docker')) {
@@ -414,6 +586,27 @@ trait CommonTrait
 
         }
         throw new \Exception("Invalid operation when choosing path to $name");
+    }
+
+    /**
+     * Call drush for the local environment.
+     *
+     * @param array $args
+     *   All arguments and options passed to drush.
+     * @param array $exec_options
+     *   Additional options passed to the robo taskExec().
+     *
+     * @throws \Exception
+     */
+    protected function drush(SymfonyStyle $io, array $args, array $exec_options = ['print_output' => true]): Result
+    {
+        $task = $this->taskExec($this->getBinaryLocation($io, 'drush', '', false));
+        if (!empty($args)) {
+            $task->args($args);
+        }
+        return $task
+            ->printOutput($exec_options['print_output'] ?? true)
+            ->run();
     }
 
     /**
@@ -543,7 +736,7 @@ trait CommonTrait
             $enable_modules = array_merge($this->composerDependenciesToDrupalModuleName($install_projects_dev), $enable_modules);
         }
         // If a local has not been set up, no need to enable.
-        if (!$this->isDefaultLocalEnvironmentSet()) {
+        if ($this->getActiveEnvironmentName() === null) {
             $enable_modules = [];
         }
         // Only enable modules that are not already enabled.
@@ -741,8 +934,7 @@ trait CommonTrait
                 if ($add) {
                     $this->yell('IMPORTANT MANUAL CONFIGURATION:');
                     $this->yell("The Search API Solr module has been added and enabled, but you must manually create the core at /admin/config/search/search-api/add-server. Guidelines: The machine name MUST be 'default_solr_server'; The 'Solr Connector' MUST be 'standard'; 'Solr core' must be set, but the value does not matter; All other values can be updated as you see fit.");
-                    $env = $this->getDefaultLocalEnvironment()['name'];
-                    $this->enterToContinue($io, "Once the above has been completed, you can run the command `./robo.sh $env-admin:solr-config` to put the Solr configuration in place. The environment must be rebuilt before this can be run.");
+                    $this->enterToContinue($io, "Once the above has been completed, you can run the command `./robo.sh denv-admin:solr-config` to put the Solr configuration in place. The environment must be rebuilt before this can be run.");
                 }
                 break;
 

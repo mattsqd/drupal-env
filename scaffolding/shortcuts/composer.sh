@@ -5,7 +5,7 @@ cd "$(dirname "$0")" || exit
 EXIT_STATUS=0
 
 set -x
-./php.sh vendor/bin/robo common:composer -- "$@" || EXIT_STATUS=$?
+./php.sh vendor/bin/robo denv:composer -- "$@" || EXIT_STATUS=$?
 set +x
 
 # Support MacOS and Linux.
